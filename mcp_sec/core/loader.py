@@ -1,0 +1,38 @@
+import os
+import importlib.util
+import sys
+
+class PluginLoader:
+    def __init__(self, plugin_dir: str):
+        self.plugin_dir = plugin_dir
+        
+    def load_plugins(self):
+        plugins = []
+        if not os.path.exists(self.plugin_dir):
+            print(f"[!] Warnung: Plugin-Verzeichnis {self.plugin_dir} nicht gefunden.")
+            return plugins
+            
+        for filename in os.listdir(self.plugin_dir):
+            if filename.endswith(".py") and not filename.startswith("__"):
+                plugin_name = filename[:-3]
+                filepath = os.path.join(self.plugin_dir, filename)
+                
+                # Modul dynamisch laden (Filedrop System)
+                spec = importlib.util.spec_from_file_location(plugin_name, filepath)
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    sys.modules[plugin_name] = module
+                    spec.loader.exec_module(module)
+                    
+                    # Überprüfen ob das Modul die nötigen Schnittstellen hat
+                    if hasattr(module, "run_test") and hasattr(module, "info"):
+                        info = module.info()
+                        required_keys = ["name", "description", "severity", "author", "contact", "version"]
+                        if all(k in info for k in required_keys):
+                            plugins.append(module)
+                        else:
+                            missing = [k for k in required_keys if k not in info]
+                            print(f"[!] Warnung: {filename} ignoriert. Fehlende Metadaten: {missing}")
+                    else:
+                        print(f"[!] Warnung: {filename} fehlt 'info()' oder 'run_test()'")
+        return plugins

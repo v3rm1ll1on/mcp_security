@@ -1,0 +1,14 @@
+[project]
+name = "mcp_sec"
+version = "0.1.0"
+description = "MCP Server Vulnerability Scanner"
+authors = [
+    {name = "Marc Stöcker", email = "v3rm1ll1on@proton.me"}
+]
+dependencies = [
+    "mcp",
+]
+requires-python = ">=3.10"
+
+[project.scripts]
+mcp-scan = "mcp_sec.cli:main"
