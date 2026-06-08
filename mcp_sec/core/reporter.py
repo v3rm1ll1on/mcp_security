@@ -6,6 +6,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich import box
+from rich.markup import escape
 
 class EnumEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -61,6 +62,27 @@ class Reporter:
         
         # If vulnerabilities were found, print them in colored panels
         if vulnerabilities:
+            # Tool Summary Table
+            tool_vulns = {}
+            for vuln in vulnerabilities:
+                tool_name = vuln.tool_name or "Unknown Tool"
+                if tool_name not in tool_vulns:
+                    tool_vulns[tool_name] = []
+                tool_vulns[tool_name].append(vuln)
+                
+            tool_table = Table(title="Vulnerable Tools Summary", box=box.SIMPLE_HEAVY, show_lines=True)
+            tool_table.add_column("Tool", style="bold yellow")
+            tool_table.add_column("Vulnerabilities Found", style="red")
+            tool_table.add_column("Severities", justify="center")
+            
+            for tool, vulns in tool_vulns.items():
+                vuln_names = "\n".join(f"• {escape(str(v.title))}" for v in vulns)
+                severities = "\n".join(f"[{'magenta' if v.severity == Severity.CRITICAL else 'red' if v.severity == Severity.HIGH else 'yellow' if v.severity == Severity.MEDIUM else 'blue'}]{v.severity.value}[/]" for v in vulns)
+                tool_table.add_row(tool, vuln_names, severities)
+                
+            self.console.print("\n")
+            self.console.print(tool_table)
+
             self.console.print("\n[bold red]VULNERABILITY DETAILS[/bold red]")
             for vuln in vulnerabilities:
                 # Color based on severity (Critical=magenta, High=red, etc.)
@@ -72,29 +94,25 @@ class Reporter:
                 elif vuln.severity == Severity.LOW:
                     color = "blue"
                     
-                content = (
-                    f"[bold]Tool:[/bold] {vuln.tool_name}\n"
-                    f"[bold]Payload:[/bold] [yellow]{vuln.payload}[/yellow]\n"
-                    f"[bold]Description:[/bold] {vuln.description}"
-                )
-                
-                title_parts = [f"[bold {color}]{vuln.severity.value} - {vuln.title}[/]"]
+                display_payload = escape(str(vuln.payload)) if vuln.payload else "N/A"
+                if len(display_payload) > 150:
+                    display_payload = display_payload[:147] + "..."
+
+                title_parts = [f"[bold {color}]{vuln.severity.value} - {escape(str(vuln.title))}[/]"]
                 meta_parts = []
                 if vuln.cwe:
-                    meta_parts.append(f"[bold cyan]{vuln.cwe}[/bold cyan]")
+                    meta_parts.append(f"[cyan]{escape(str(vuln.cwe))}[/cyan]")
                 if vuln.owasp:
-                    meta_parts.append(f"[bold cyan]{vuln.owasp}[/bold cyan]")
+                    meta_parts.append(f"[cyan]{escape(str(vuln.owasp))}[/cyan]")
                 if meta_parts:
-                    title_parts.append(f" ({', '.join(meta_parts)})")
+                    title_parts.append(f" [dim]({', '.join(meta_parts)})[/dim]")
                 
-                panel = Panel(
-                    content,
-                    title="".join(title_parts),
-                    border_style=color,
-                    expand=False
-                )
-                self.console.print(panel)
-        self.console.print("\n")
+                # Schlanke, flache Formatierung ohne klobige Boxen
+                self.console.print(f"[bold {color}]▶[/] {''.join(title_parts)}")
+                self.console.print(f"  [dim]Tool:[/dim]        {escape(str(vuln.tool_name))}")
+                self.console.print(f"  [dim]Payload:[/dim]     [yellow]{display_payload}[/yellow]")
+                self.console.print(f"  [dim]Description:[/dim] {escape(str(vuln.description))}\n")
+        self.console.print("")
 
     def generate_html(self):
         import html

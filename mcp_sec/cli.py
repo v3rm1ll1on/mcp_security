@@ -30,7 +30,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 from rich import box
 
-console = Console()
+console = Console(stderr=True)
 
 async def async_main(target: str, plugin_dir: str, output_format: str, verbose: bool, env_dict: dict, config, playbook_dict: dict = None):
     console.print(f"[bold blue][*][/bold blue] Starting MCP Security Scanner against target: [bold]{target}[/bold]")
@@ -57,7 +57,9 @@ async def async_main(target: str, plugin_dir: str, output_format: str, verbose: 
         unsafe_keywords=config.unsafe_keywords,
         exclude_tools=config.exclude_tools,
         include_only_tools=config.include_only_tools,
-        playbook=playbook_dict
+        playbook=playbook_dict,
+        call_timeout=config.call_timeout,
+        max_concurrent_calls=config.max_concurrent_calls
     )
     results = []
     
@@ -66,6 +68,7 @@ async def async_main(target: str, plugin_dir: str, output_format: str, verbose: 
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         transient=True,
+        console=console,
     ) as progress:
         task = progress.add_task("[cyan]Connecting & running security scans...", total=None)
         
@@ -192,8 +195,9 @@ def main():
             else:
                 env_dict[env_var.strip()] = os.environ.get(env_var.strip(), "")
                 
-    # Configure logging: verbose -> DEBUG for mcp_sec, else WARNING (silent by default)
-    log_level = logging.DEBUG if verbose else logging.WARNING
+    # Configure logging: verbose -> DEBUG, else config_obj.log_level (default WARNING)
+    log_level_str = "DEBUG" if verbose else config_obj.log_level
+    log_level = getattr(logging, log_level_str.upper(), logging.WARNING)
     logging.basicConfig(format="[%(levelname)s] %(name)s: %(message)s", level=log_level)
     logging.getLogger("mcp_sec").setLevel(log_level)
 

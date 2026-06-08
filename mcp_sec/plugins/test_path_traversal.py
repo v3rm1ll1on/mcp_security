@@ -16,7 +16,14 @@ def info():
     }
 
 async def run_test(mcp_client, server_tools) -> PluginResult:
-    payloads = ["../../../etc/passwd", "/etc/passwd", "..\\..\\..\\windows\\win.ini"]
+    payloads = [
+        "../../../etc/passwd", 
+        "/etc/passwd", 
+        "////etc/passwd", 
+        "..\\..\\..\\windows\\win.ini", 
+        "C:\\Windows\\win.ini", 
+        "C:/Windows/win.ini"
+    ]
 
     def check_vuln(res_text, exc, is_error=False):
         return bool(res_text and ("root:x:0:0:" in res_text or "[extensions]" in res_text))

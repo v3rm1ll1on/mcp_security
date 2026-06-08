@@ -20,6 +20,10 @@ class Config:
             "destroy", "rm", "mkdir", "upload", "send", "publish", "insert", 
             "add", "set", "modify", "save", "append", "touch", "post"
         ]
+        self.call_timeout = 10.0
+        self.max_concurrent_calls = 5
+        self.log_level = "WARNING"
+        
         self.exclude_tools = []
         self.include_only_tools = []
         self.exclude_plugins = []
@@ -90,6 +94,21 @@ class Config:
                 if not isinstance(glob["verbose"], bool):
                     raise ConfigValidationError("'global.verbose' must be a boolean.")
                 self.verbose = glob["verbose"]
+
+            if "call_timeout" in glob:
+                if not isinstance(glob["call_timeout"], (int, float)):
+                    raise ConfigValidationError("'global.call_timeout' must be a number.")
+                self.call_timeout = float(glob["call_timeout"])
+
+            if "max_concurrent_calls" in glob:
+                if not isinstance(glob["max_concurrent_calls"], int):
+                    raise ConfigValidationError("'global.max_concurrent_calls' must be an integer.")
+                self.max_concurrent_calls = glob["max_concurrent_calls"]
+
+            if "log_level" in glob:
+                if glob["log_level"] not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
+                    raise ConfigValidationError("'global.log_level' must be a valid logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).")
+                self.log_level = glob["log_level"]
 
         # Tools section
         if "tools" in data:

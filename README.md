@@ -26,6 +26,9 @@ mcp-scan --target node --server-args "path/to/server.js"
 
 # Output in JSON format (useful for CI/CD)
 mcp-scan --target npx --server-args "-y,@modelcontextprotocol/server-memory" --format json
+
+# Pipeline friendly: Extract only failed plugins using jq
+mcp-scan -p playbook.json -f json | jq '.[] | select(.success == false)'
 ```
 ## Configuration
 

@@ -1,7 +1,10 @@
 {
-  "mcpserver": "python3 mock_server.py",
+  "mcpserver": "python3 /home/siddy/mcp_security/mock_server.py",
   "tools": {
     "read_file": [
+      "path_traversal"
+    ],
+    "write_file": [
       "path_traversal"
     ],
     "execute_system_command": [
@@ -12,6 +15,35 @@
     ],
     "search_users": [
       "sqli"
+    ],
+    "process_llm_prompt": [
+      "prompt_injection"
+    ],
+    "parse_xml": [
+      "xxe_injection"
+    ],
+    "render_template": [
+      "ssti"
+    ],
+    "generate_html_report": [
+      "xss"
+    ],
+    "process_data": [
+      "dos_redos"
+    ],
+    "blind_query": [
+      "timing_attack"
+    ],
+    "write_user_profile": [
+      "race_condition"
+    ],
+    "read_agent_command": [
+      "agentic_hijacking"
+    ],
+    "*": [
+      "mutational_fuzzing",
+      "context_exhaustion",
+      "schema_leakage"
     ]
   }
 }
