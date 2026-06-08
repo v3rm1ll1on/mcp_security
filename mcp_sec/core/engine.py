@@ -1,20 +1,42 @@
 import asyncio
+import logging
 import os
 import fnmatch
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp_sec.core.models import PluginResult, Vulnerability, Severity
 
+logger = logging.getLogger("mcp_sec")
+
+# Patterns for env var keys that should never be forwarded to the MCP target process
+_SECRET_ENV_PATTERNS = [
+    "*SECRET*", "*API_KEY*", "*APIKEY*", "*PASSWORD*", "*PASSWD*",
+    "*TOKEN*", "*PRIVATE_KEY*", "*CREDENTIAL*", "*AUTH*",
+]
+
+def _sanitize_env(env: dict) -> dict:
+    """Remove secret-looking keys from an env dict before passing to a subprocess."""
+    safe = {}
+    for k, v in env.items():
+        if any(fnmatch.fnmatch(k.upper(), pat) for pat in _SECRET_ENV_PATTERNS):
+            logger.debug("Stripped sensitive env var '%s' from subprocess environment.", k)
+        else:
+            safe[k] = v
+    return safe
+
 class Runner:
     def __init__(self, target: str, args: list, plugins: list, env: dict = None,
                  allow_destructive: bool = False, unsafe_keywords: list = None,
                  exclude_tools: list = None, include_only_tools: list = None,
-                 playbook: dict = None):
+                 playbook: dict = None, call_timeout: float = 10.0,
+                 max_concurrent_calls: int = 5):
         self.target = target
         self.args = args
         self.plugins = plugins
         self.env = env
         self.allow_destructive = allow_destructive
+        self.call_timeout = call_timeout
+        self.semaphore = asyncio.Semaphore(max_concurrent_calls)
         self.unsafe_keywords = set(unsafe_keywords) if unsafe_keywords is not None else {
             "write", "delete", "remove", "create", "update", "patch", "put", 
             "destroy", "rm", "mkdir", "upload", "send", "publish", "insert", 
@@ -27,8 +49,8 @@ class Runner:
     async def run(self, on_discovery=None):
         results = []
         
-        # Merge os.environ mit benutzerdefinierten Variablen, um PATH etc. nicht zu verlieren
-        merged_env = os.environ.copy()
+        # Merge os.environ with user-supplied variables (PATH etc.), then strip secrets
+        merged_env = _sanitize_env(os.environ.copy())
         if self.env:
             merged_env.update(self.env)
             
@@ -141,13 +163,17 @@ class Runner:
                                         vuln.owasp = p_owasp
                             results.append(result)
                         except Exception as e:
+                            logger.error(
+                                "Plugin '%s' raised an unhandled exception: %s",
+                                plugin_name, e, exc_info=True
+                            )
                             results.append(PluginResult(
                                 plugin_name=info.get("title", info.get("name", "Unknown")),
                                 success=False,
                                 message=f"Execution error: {str(e)}"
                             ))
         except Exception as e:
-            print(f"[!] Critical error connecting to server: {str(e)}")
+            logger.critical("Critical error connecting to server '%s': %s", self.target, e)
             results.append(PluginResult(
                 plugin_name="Engine",
                 success=False,

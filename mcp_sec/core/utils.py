@@ -1,5 +1,9 @@
 from typing import Any, Dict, Optional, Callable, AsyncGenerator, Union
+import asyncio
+import logging
 from mcp_sec.core.models import PluginResult, Vulnerability, Severity
+
+logger = logging.getLogger("mcp_sec")
 
 async def run_payload_scan(
     mcp_client: Any,
@@ -61,17 +65,37 @@ async def scan_tool_payloads(
     server_tools: list,
     payloads: list,
     check_vuln: Callable[[Optional[str], Optional[Exception], bool], bool],
-    filter_param: Optional[Callable[[str, Dict[str, Any]], bool]] = None
+    filter_param: Optional[Callable[[str, Dict[str, Any]], bool]] = None,
+    semaphore: Optional[asyncio.Semaphore] = None,
+    call_timeout: float = 10.0
 ) -> AsyncGenerator[tuple, None]:
     """
-    Iteriert über alle Tools, deren String-Parameter und die angegebenen Payloads.
-    Führt das Tool aus und ruft check_vuln auf, um eine Sicherheitslücke zu erkennen.
-    Bricht beim ersten Treffer pro Parameter ab (break).
+    Iterates over all tools, their string parameters, and the given payloads.
+    Calls check_vuln to detect vulnerabilities. Breaks on first hit per parameter.
+
+    Args:
+        semaphore:    Optional asyncio.Semaphore to limit concurrent tool calls.
+        call_timeout: Seconds to wait for a single tool call before timing out (default: 10s).
     """
     for tool in server_tools:
-        schema = getattr(tool, "inputSchema", None) or {}
-        properties = schema.get("properties", {})
+        # Robust schema parsing — malformed schemas from hostile servers should not crash the scan
+        try:
+            schema = getattr(tool, "inputSchema", None) or {}
+            if not isinstance(schema, dict):
+                raise TypeError(f"inputSchema is not a dict: {type(schema)}")
+            properties = schema.get("properties", {})
+            if not isinstance(properties, dict):
+                raise TypeError(f"'properties' is not a dict: {type(properties)}")
+        except Exception as schema_err:
+            logger.warning(
+                "Skipping tool '%s' — malformed schema: %s", tool.name, schema_err
+            )
+            continue
+
         for prop_name, prop_details in properties.items():
+            if not isinstance(prop_details, dict):
+                logger.debug("Skipping param '%s.%s' — details not a dict", tool.name, prop_name)
+                continue
             if prop_details.get("type") != "string":
                 continue
             if filter_param and not filter_param(prop_name, prop_details):
@@ -82,10 +106,24 @@ async def scan_tool_payloads(
                 res_text = None
                 exc = None
                 is_error = False
+
+                async def _call():
+                    return await mcp_client.call_tool(tool.name, arguments=args)
+
                 try:
-                    res = await mcp_client.call_tool(tool.name, arguments=args)
+                    if semaphore:
+                        async with semaphore:
+                            res = await asyncio.wait_for(_call(), timeout=call_timeout)
+                    else:
+                        res = await asyncio.wait_for(_call(), timeout=call_timeout)
                     is_error = getattr(res, "isError", False) is True
                     res_text = extract_text_content(res)
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "Tool call '%s' timed out after %.1fs (param: %s, payload: %.40r)",
+                        tool.name, call_timeout, prop_name, payload
+                    )
+                    exc = TimeoutError(f"Tool call timed out after {call_timeout}s")
                 except Exception as e:
                     exc = e
                 

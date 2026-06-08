@@ -121,5 +121,5 @@ def test_reporter_markdown_vuln_count(capsys):
     reporter.generate()
     
     captured = capsys.readouterr()
-    assert "## Gefundene Schwachstellen (2)" in captured.out
+    assert "## Vulnerabilities Found (2)" in captured.out
 

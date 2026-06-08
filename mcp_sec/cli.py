@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import logging
 import os
 import shlex
 import contextlib
@@ -191,6 +192,11 @@ def main():
             else:
                 env_dict[env_var.strip()] = os.environ.get(env_var.strip(), "")
                 
+    # Configure logging: verbose -> DEBUG for mcp_sec, else WARNING (silent by default)
+    log_level = logging.DEBUG if verbose else logging.WARNING
+    logging.basicConfig(format="[%(levelname)s] %(name)s: %(message)s", level=log_level)
+    logging.getLogger("mcp_sec").setLevel(log_level)
+
     asyncio.run(async_main(
         target=target,
         plugin_dir=plugin_dir,
