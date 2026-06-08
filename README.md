@@ -1,130 +1,140 @@
 # MCP Security Scanner
 
-A modular, extensible security scanning framework for Model Context Protocol (MCP) servers.
+A modular, highly extensible, and AI-native security scanning framework designed specifically to audit **Model Context Protocol (MCP)** servers.
 
-## Overview
-This tool is designed to test MCP servers for common security vulnerabilities (e.g., Command Injection, Path Traversal) by simulating malicious inputs through standard MCP tool calls.
+While traditional DAST scanners target REST or GraphQL APIs, MCP servers sit directly between LLMs (like Claude or GPT-4) and sensitive backend infrastructure. This creates entirely new attack vectors. **MCP Security Scanner** is built to automatically detect both traditional Web/API vulnerabilities and novel AI-specific attacks (like Agentic Hijacking or Context Flooding).
 
-It features a "Drop-In" plugin system: just drop a Python file into the `plugins/` directory, and the scanner will pick it up automatically.
+---
+
+## Features
+
+* **Plug-and-Play Architecture**: Drop a python file into `plugins/` and it is instantly integrated into the scanning engine.
+* **15+ Built-in Security Modules**:
+  * **Traditional Security**: SQLi, XXE, Command Injection, Path Traversal, SSRF, XSS, SSTI, DoS/ReDoS.
+  * **AI-Specific Security**: Agentic Hijacking (Tool-Call Injection), Prompt Injection/Jailbreaking, Context Window Exhaustion.
+  * **Concurrency/Fuzzing**: Mutational Type-Juggling, Race Conditions.
+  * **MCP Core**: Resource Path Traversal, Schema Information Leakage.
+* **CI/CD Ready**: Supports `json`, `text`, `markdown`, and `html` output. Exit codes and JSON dumps map perfectly into automated pipelines.
+* **Smart Context-Aware Routing**: Define `playbooks` to map specific vulnerability checks to specific tools based on naming conventions (e.g., test SQLi only on `search_*` tools).
+* **Safe Mode by Default**: Built-in AST-based keyword exclusion prevents the scanner from accidentally deleting databases or writing files unless explicitly permitted via `allow_destructive`.
+
+---
 
 ## Installation
-Ensure you have Python 3.10+ installed.
+
+Requires Python 3.10+.
 
 ```bash
-python -m venv venv
+git clone https://github.com/v3rm1ll1on/mcp_security.git
+cd mcp_security
+python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 pip install -e .
 ```
 
+---
+
 ## Usage
-The scanner runs as a CLI tool and connects to a target MCP server via `stdio`.
+
+The scanner connects directly to a target MCP server via `stdio`.
+
+### Basic Scans
 
 ```bash
-# Basic scan against a local node-based MCP server
-mcp-scan --target node --server-args "path/to/server.js"
+# Scan a Node-based MCP server
+mcp-scan --target "node path/to/server.js"
 
-# Output in JSON format (useful for CI/CD)
-mcp-scan --target npx --server-args "-y,@modelcontextprotocol/server-memory" --format json
-
-# Pipeline friendly: Extract only failed plugins using jq
-mcp-scan -p playbook.json -f json | jq '.[] | select(.success == false)'
+# Scan an NPX package server directly
+mcp-scan --target "npx -y @modelcontextprotocol/server-postgres"
 ```
-## Configuration
 
-The scanner can be configured using a `mcp-scan.json` file in the current working directory, or by specifying a path using `-c` / `--config`.
+### Pipeline Integration (JSON Output)
 
-Here is an example `mcp-scan.json`:
+```bash
+# Output raw JSON for machine parsing
+mcp-scan -p playbook.json -f json > report.json
+
+# Use `jq` to extract only the failed security checks:
+cat report.json | jq '.[] | select(.success == false)'
+```
+
+---
+
+## Configuration & Playbooks
+
+The scanner can be deeply customized using `mcp-scan.json` and `playbook.json`. 
+
+### Global Configuration (`mcp-scan.json`)
+Allows you to inject secure environment variables to the target process, define global tool exclusions, and enforce non-destructive operations.
 
 ```json
 {
   "target": "python3 mock_server.py",
   "format": "text",
-  "verbose": false,
-  "plugin_dir": "mcp_sec/plugins",
   "global": {
     "allow_destructive": false,
     "unsafe_keywords": ["write", "delete", "remove", "drop", "destroy", "rm"],
     "env": {
       "API_KEY": "secret_token_here"
     }
-  },
-  "tools": {
-    "exclude": ["heavy_computation_tool"],
-    "include_only": []
-  },
-  "plugins": {
-    "exclude": ["Basic Ping"]
   }
 }
 ```
 
-CLI arguments will always take precedence over configuration file settings.
-
-## Playbooks
-
-If you want to test specific tools with selected test plugins, you can create a separate **Playbook** (`playbook.json`) and pass it using `-p` / `--playbook`.
-
-This allows you to define playbooks independently of the general configuration, e.g., to run expensive or critical tests (like SQL injection) only on appropriate input fields.
-
-### Glob Wildcards for Tools
-You can use glob patterns (wildcards like `read_*` or `*file*`) in the playbook to select multiple tools at once and assign plugins to them.
-
-### Example `playbook.json`:
+### Playbook (`playbook.json`)
+Instead of blasting every payload at every parameter, use playbooks to intelligently map plugins to tools using glob patterns. This drastically reduces scan time and noise.
 
 ```json
 {
-  "mcpserver": "python3 mock_server.py",
   "tools": {
     "read_*": [
       "path_traversal"
     ],
-    "execute_system_command": [
-      "command_injection"
-    ],
-    "fetch_webpage": [
-      "ssrf"
-    ],
     "search_*": [
-      "sqli"
+      "sqli",
+      "timing_attack"
+    ],
+    "*": [
+      "schema_leakage",
+      "context_exhaustion",
+      "mutational_fuzzing"
     ]
   }
 }
 ```
 
-* When a playbook is loaded, the `mcpserver` command configured in it is selected as the target (unless `-t` is explicitly passed).
-* Only the tools defined in the playbook are scanned, and only with their assigned plugins. A wildcard `"*"` can be used to allow all plugins for a tool.
-* Plugins can be mapped by their name (e.g. `"sqli"`), module name (e.g. `"test_sqli"`), or their groups (e.g. `"owasp"`). Each plugin can define a list of groups in its metadata.
-* Tools that are skipped or excluded from scanning due to playbook or configuration filters are transparently reported as **SKIP** in the scan summary.
+---
 
-### CLI Options:
+## Included Plugins & Vulnerability Coverage
 
-* `-c`, `--config`: Path to the main configuration file (default: `mcp-scan.json`).
-* `-p`, `--playbook`: Path to the playbook file (default: `playbook.json`, if present in the current directory).
-* `-d`, `--plugin-dir`: Directory containing the security plugins (default: `mcp_sec/plugins`).
-* `-t`, `--target`: Command to start the target MCP server (overrides `mcpserver` and `target` settings).
-* `-f`, `--format`: Output format (`text`, `json`, `html`, or `markdown`).
+The scanner actively maps vulnerabilities against **CWE** (Common Weakness Enumeration) and **OWASP Top 10 / OWASP LLM Top 10**.
 
-## Output Formats & Classification
+| Plugin | Attack Vector | Target |
+|---|---|---|
+| **SQL Injection** | `CWE-89` | Standard injection on string parameters |
+| **Command Injection** | `CWE-77` | RCE via shell metacharacters |
+| **Path Traversal / LFI** | `CWE-22` | Breaking out of directories via `../` |
+| **Resource Traversal** | `CWE-22` | Path traversal targeting the MCP Resource API |
+| **SSRF** | `CWE-918` | Server-Side Request Forgery via internal IPs |
+| **XXE** | `CWE-611` | External entity parsing in XML payloads |
+| **SSTI** | `CWE-1336` | Template evaluations (`{{7*7}}`) |
+| **Agentic Hijacking** | `CWE-74` / `LLM02` | Unescaped tool-call structure reflection |
+| **Prompt Injection** | `CWE-74` / `LLM01` | LLM persona overrides and jailbreaks |
+| **Context Exhaustion** | `CWE-400` / `LLM04` | Denial of Service via massive token responses |
+| **DoS / ReDoS** | `CWE-400` | Uncontrolled resource consumption via Evil Regex |
+| **Timing Attack** | `CWE-208` | Blind injection detection via `sleep()` delays |
+| **Race Conditions** | `CWE-362` | Concurrent state mutation crashes |
+| **Mutational Fuzzing** | `CWE-20` | Type Juggling (Arrays/Dicts where Strings expected) |
+| **Schema Leakage** | `CWE-200` | Exposing internal IPs/Tokens in tool JSON schemas |
 
-The scanner classifies detected vulnerabilities using standardized identifiers:
-* **CWE (Common Weakness Enumeration)** (e.g., `CWE-89` for SQL Injection)
-* **OWASP Top 10** (e.g., `A03:2021-Injection`)
+---
 
-### Supported Report Formats (`-f` / `--format`):
-* `text`: Colorful, structured terminal output using Rich.
-* `json`: Structured JSON dump (ideal for CI/CD integrations).
-* `markdown`: Generates a clean Markdown report suitable for PR comments or issue trackers.
-* `html`: Creates a visually premium interactive HTML report in modern dark mode, complete with filter options (PASS, FAIL, SKIP) and interactive details.
+## Writing Custom Plugins
 
-## Core Architecture
-- **Loader**: Automatically discovers and validates plugins from the `mcp_sec/plugins/` directory.
-- **Engine**: Handles the asynchronous `stdio` connection to the MCP target and executes all loaded plugins.
-- **Reporter**: Generates a human-readable summary or JSON/HTML/Markdown output of vulnerabilities.
-- **Models**: Standardized `PluginResult` and `Vulnerability` dataclasses.
+Developing custom tests is dead simple. Read the full [Plugin Development Guide](docs/plugin_development.md) for details on the `run_payload_scan` API.
 
-## Contributing / Custom Plugins
-See [docs/plugin_development.md](docs/plugin_development.md) for instructions on how to write custom tests.
+---
 
 ## Disclaimer
-Do not use this tool against targets you do not own or do not have permission to test.
+This tool is provided for educational and authorized security testing purposes only. Do not use this tool against targets you do not own or do not have explicit permission to test. The authors and contributors assume no liability and are not responsible for any misuse or damage caused by this program.

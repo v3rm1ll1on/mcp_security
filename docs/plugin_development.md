@@ -193,4 +193,19 @@ The `server_tools` list contains Tool objects with:
 - `tool.description` — human-readable description
 - `tool.inputSchema` — JSON schema of the expected input (`properties`, `required`, etc.)
 
+### Testing MCP Resources and Prompts
+
+If you want to test the other core pillars of MCP (Resources and Prompts), you can access them directly on the `mcp_client` object:
+
+```python
+# Fetch available resources
+resources = await mcp_client.list_resources()
+
+# Read a specific resource
+content = await mcp_client.read_resource("file:///etc/passwd")
+
+# Fetch available prompts
+prompts = await mcp_client.list_prompts()
+```
+
 > **Note:** Outer `try/except` blocks are **not needed** — the runner catches all uncaught exceptions globally. Use `call_tool_safe` or `scan_tool_payloads` for graceful per-call error handling.
