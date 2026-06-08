@@ -1,0 +1,24 @@
+{
+  "target": "python3 mock_server.py",
+  "format": "text",
+  "verbose": false,
+  "plugin_dir": "mcp_sec/plugins",
+  "global": {
+    "allow_destructive": false,
+    "unsafe_keywords": [
+      "write", "delete", "remove", "create", "update", "patch", "put", 
+      "destroy", "rm", "mkdir", "upload", "send", "publish", "insert", 
+      "add", "set", "modify", "save", "append", "touch", "post"
+    ],
+    "env": {
+      "API_KEY": "sample_secret_key"
+    }
+  },
+  "tools": {
+    "exclude": [],
+    "include_only": []
+  },
+  "plugins": {
+    "exclude": []
+  }
+}

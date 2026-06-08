@@ -1,0 +1,30 @@
+{
+  "target": "python3 mock_server.py",
+  "plugin_dir": "mcp_sec/plugins",
+  "format": "text",
+  "verbose": false,
+  "global": {
+    "allow_destructive": false,
+    "unsafe_keywords": [
+      "write", "delete", "remove", "create", "update", "patch", "put", 
+      "destroy", "rm", "mkdir", "upload", "send", "publish", "insert", 
+      "add", "set", "modify", "save", "append", "touch", "post"
+    ],
+    "env": {
+      "API_KEY": "YOUR_SECRET_KEY_HERE",
+      "CUSTOM_ENV_VAR": "value"
+    }
+  },
+  "tools": {
+    "exclude": [
+      "heavy_calculation_tool",
+      "interactive_confirm_tool"
+    ],
+    "include_only": []
+  },
+  "plugins": {
+    "exclude": [
+      "ping"
+    ]
+  }
+}

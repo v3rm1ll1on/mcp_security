@@ -1,0 +1,17 @@
+{
+  "mcpserver": "python3 mock_server.py",
+  "tools": {
+    "read_file": [
+      "path_traversal"
+    ],
+    "execute_system_command": [
+      "command_injection"
+    ],
+    "fetch_webpage": [
+      "ssrf"
+    ],
+    "search_users": [
+      "sqli"
+    ]
+  }
+}

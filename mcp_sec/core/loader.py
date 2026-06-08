@@ -3,8 +3,9 @@ import importlib.util
 import sys
 
 class PluginLoader:
-    def __init__(self, plugin_dir: str):
+    def __init__(self, plugin_dir: str, exclude_plugins: list = None):
         self.plugin_dir = plugin_dir
+        self.exclude_plugins = exclude_plugins or []
         
     def load_plugins(self):
         plugins = []
@@ -27,8 +28,20 @@ class PluginLoader:
                     # Überprüfen ob das Modul die nötigen Schnittstellen hat
                     if hasattr(module, "run_test") and hasattr(module, "info"):
                         info = module.info()
+                        plugin_id = info.get("name")
+                        
+                        # Überprüfen ob der Name nur Buchstaben und Underscores enthält
+                        import re
+                        if not plugin_id or not re.match(r"^[a-zA-Z_]+$", plugin_id):
+                            print(f"[!] Warnung: {filename} ignoriert. Plugin-Name '{plugin_id}' darf nur Buchstaben und Underscores enthalten.")
+                            continue
+                            
                         required_keys = ["name", "description", "severity", "author", "contact", "version"]
                         if all(k in info for k in required_keys):
+                            if plugin_id in self.exclude_plugins or plugin_name in self.exclude_plugins:
+                                module._excluded = True
+                            else:
+                                module._excluded = False
                             plugins.append(module)
                         else:
                             missing = [k for k in required_keys if k not in info]
